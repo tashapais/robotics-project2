@@ -52,13 +52,18 @@ class NLinkArm(object):
         self.update_points()
 
         # Check for collision with each obstacle
+        collision_detected = False
         for obstacle in obstacles:
             if self.check_collision_with_obstacle(obstacle):
-                # Revert to the original joint angles in case of collision
-                self.joint_angles = original_angles
-                self.update_points()
-                print("Collision detected, reverting to previous state.")
-                return
+                collision_detected = True
+                break
+
+        if collision_detected:
+            # Revert to the original joint angles in case of collision
+            self.joint_angles = original_angles
+            self.update_points()
+            print("Collision detected, reverting to previous state.")
+
 
 
 
@@ -128,13 +133,25 @@ class NLinkArm(object):
         plt.draw()
         plt.pause(1e-5)
 
+    @staticmethod
+    def circle_to_polygon(center, radius, num_vertices=8):
+        angles = np.linspace(0, 2 * np.pi, num_vertices, endpoint=False)
+        return np.array([[center[0] + radius * np.cos(angle), center[1] + radius * np.sin(angle)] for angle in angles])
 
     def check_collision_with_obstacle(self, obstacle):
+        # Check for each link
         for i in range(self.n_links):
             rectangle = self.draw_rectangle(self.points[i], self.points[i + 1])
             arm_link_polygon = patches.Polygon(rectangle).get_path().to_polygons()[0]
-            if collision_checking.collides(arm_link_polygon, obstacle):
+            if collision_checking.collides(np.array(arm_link_polygon), np.array(obstacle)):
                 return True
+
+        # Check for each joint
+        for point in self.points:
+            joint_polygon = NLinkArm.circle_to_polygon(point, self.joint_radius)
+            if collision_checking.collides(np.array(joint_polygon), np.array(obstacle)):
+                return True
+
         return False
 
 if __name__ == "__main__":
@@ -163,9 +180,3 @@ if __name__ == "__main__":
     # Plot the arm and the obstacles
     arm.plot(arm_polygons)
     plt.show()  
-
-
-
-
-
-
