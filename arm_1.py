@@ -1,7 +1,8 @@
+import argparse
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
-
+import collision_checking
 
 class NLinkArm(object):
     """
@@ -33,40 +34,33 @@ class NLinkArm(object):
         self.joint_angles = joint_angles
         self.update_points()
 
-    def transformation_matrix(self, theta, length):
-        return np.array([
-            [np.cos(theta), -np.sin(theta), length * np.cos(theta)],
-            [np.sin(theta), np.cos(theta), length * np.sin(theta)],
-            [0, 0, 1]
-        ])
-    
-    # transformation matrix approach
-    def update_points(self):
-        point = np.array([0, 0, 1]).reshape(3, 1)
-        prev_trans = np.identity(3) # Initialize as identity matrix
-        for i in range(self.n_links):
-            trans = self.transformation_matrix(self.joint_angles[i], self.link_lengths[i])
-            prev_trans = prev_trans @ trans
-            new_point = prev_trans @ point
-            new_point[0, 0] += self.points[0][0]
-            new_point[1, 0] += self.points[0][1]
-            self.points[i + 1][0] = new_point[0, 0]
-            self.points[i + 1][1] = new_point[1, 0]
-
     # geometric approach
-    # def update_points(self):
-    #     for i in range(1, self.n_links + 1):
-    #         self.points[i][0] = self.points[i - 1][0] + self.link_lengths[i - 1] * np.cos(np.sum(self.joint_angles[:i]))
-    #         self.points[i][1] = self.points[i - 1][1] + self.link_lengths[i - 1] * np.sin(np.sum(self.joint_angles[:i]))
-    #     self.end_effector = np.array(self.points[self.n_links]).T
-    #     print(f"End effector: {self.end_effector}")
+    def update_points(self):
+        for i in range(1, self.n_links + 1):
+            self.points[i][0] = self.points[i - 1][0] + self.link_lengths[i - 1] * np.cos(np.sum(self.joint_angles[:i]))
+            self.points[i][1] = self.points[i - 1][1] + self.link_lengths[i - 1] * np.sin(np.sum(self.joint_angles[:i]))
+        self.end_effector = np.array(self.points[self.n_links]).T
     
 
-    def rotate_joint(self, joint_idx, direction):
-        """Rotate joint by a given direction. Positive for counterclockwise, negative for clockwise."""
+    def rotate_joint(self, joint_idx, direction, obstacles):
+        # Store the original angles in case we need to revert
+        original_angles = np.copy(self.joint_angles)
+
+        # Rotate the joint
         delta_angle = 5 * np.pi / 180  # 5 degrees in radians
         self.joint_angles[joint_idx] += delta_angle * direction
         self.update_points()
+
+        # Check for collision with each obstacle
+        for obstacle in obstacles:
+            if self.check_collision_with_obstacle(obstacle):
+                # Revert to the original joint angles in case of collision
+                self.joint_angles = original_angles
+                self.update_points()
+                print("Collision detected, reverting to previous state.")
+                return
+
+
 
     def draw_rectangle(self, start, end):
         """Create a rectangle from start to end with a certain width."""
@@ -90,46 +84,44 @@ class NLinkArm(object):
 
         return np.array([p1, p4, p3, p2, p1])
     
-    def on_key(self, event):
+    def on_key(self, event, obstacles):
         if event.key == 'q':
             self.terminate = True
             plt.close()
             return
         elif event.key == 'z':
-            self.rotate_joint(0, -1)
+            self.rotate_joint(0, -1, obstacles)
         elif event.key == 'x':
-            self.rotate_joint(0, 1)
+            self.rotate_joint(0, 1, obstacles)
         elif event.key == 'c':
-            self.rotate_joint(1, -1)
+            self.rotate_joint(1, -1, obstacles)
         elif event.key == 'v':
-            self.rotate_joint(1, 1)
-        self.plot()
+            self.rotate_joint(1, 1, obstacles)
+        self.plot(obstacles)
+
     
     def run(self):
         while not self.terminate:
             plt.pause(0.1)
 
-    def plot(self):
+    def plot(self, obstacles=None):
         self.ax.clear()
 
+        # Draw the arm
         for i in range(self.n_links):
             rectangle = self.draw_rectangle(self.points[i], self.points[i + 1])
-            self.ax.plot(rectangle[:, 0], rectangle[:, 1], 'black')
-            self.ax.fill(rectangle[:, 0], rectangle[:, 1], 'black', alpha=0.3)  # Filling the rectangle
+            self.ax.plot(rectangle[:, 0], rectangle[:, 1], 'green')
+            self.ax.fill(rectangle[:, 0], rectangle[:, 1], 'green', alpha=0.3)  
 
         for i in range(self.n_links + 1):
-            circle = patches.Circle(self.points[i], radius=self.joint_radius, facecolor='black')
+            circle = patches.Circle(self.points[i], radius=self.joint_radius, facecolor='green')
             self.ax.add_patch(circle)
 
-            # # Draw local axes at each joint
-            # angle_cumulative = np.sum(self.joint_angles[:i+1])
-            # length_axis = 0.15  # Length of the axis arrows
-            # self.ax.arrow(self.points[i][0], self.points[i][1],
-            #             length_axis * np.cos(angle_cumulative), length_axis * np.sin(angle_cumulative),
-            #             head_width=0.02, head_length=0.05, fc='red', ec='red')  # X-axis
-            # self.ax.arrow(self.points[i][0], self.points[i][1],
-            #             -length_axis * np.sin(angle_cumulative), length_axis * np.cos(angle_cumulative),
-            #             head_width=0.02, head_length=0.05, fc='g', ec='g')  # Y-axis
+        # Draw obstacles if provided
+        if obstacles is not None:
+            for obstacle in obstacles:
+                polygon = patches.Polygon(obstacle, edgecolor='black', facecolor='none')
+                self.ax.add_patch(polygon)
 
         self.ax.set_xlim([0, 2])
         self.ax.set_ylim([0, 2])
@@ -137,8 +129,43 @@ class NLinkArm(object):
         plt.pause(1e-5)
 
 
-if __name__ == "__main__":
+    def check_collision_with_obstacle(self, obstacle):
+        for i in range(self.n_links):
+            rectangle = self.draw_rectangle(self.points[i], self.points[i + 1])
+            arm_link_polygon = patches.Polygon(rectangle).get_path().to_polygons()[0]
+            if collision_checking.collides(arm_link_polygon, obstacle):
+                return True
+        return False
 
-    arm = NLinkArm([0.4, 0.25], [0.0, 0.0], joint_radius=0.05, link_width=0.1)
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Plot a random collision-free configuration of a robot arm.')
+    parser.add_argument('--map', type=str, help='Path to the file containing arm polygons.')
+    args = parser.parse_args()
+
+    # Load polygons
+    arm_polygons = np.load(args.map, allow_pickle=True)
+
+    # Create an instance of the NLinkArm with random joint angles
+    arm = NLinkArm([0.4, 0.25], np.random.uniform(-np.pi, np.pi, size=2), joint_radius=0.05, link_width=0.1)
+
+    # Remove polygons that collide with the arm
+    colliding_polygons = []
+    for i, polygon in enumerate(arm_polygons):
+        if arm.check_collision_with_obstacle(polygon):
+            colliding_polygons.append(i)
+
+    arm_polygons = np.delete(arm_polygons, colliding_polygons, axis=0)
     
-    arm.run()
+    # When arm is moved, it detects collision with the obstacles
+    arm.fig.canvas.mpl_connect('key_press_event', lambda event: arm.on_key(event, arm_polygons))
+
+
+    # Plot the arm and the obstacles
+    arm.plot(arm_polygons)
+    plt.show()  
+
+
+
+
+
+
