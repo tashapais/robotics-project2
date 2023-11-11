@@ -2,7 +2,7 @@ import argparse
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
-import collision_checking
+import part_1_1.collision_checking as collision_checking
 
 class NLinkArm(object):
     """
