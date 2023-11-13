@@ -1,9 +1,12 @@
+# Add imports and other necessary functions from arm_1.py
 import argparse
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
-import part_1_1.collision_checking as collision_checking
+import collision_checking
 
+
+# Existing NLinkArm class and other functions from arm_1.py
 class NLinkArm(object):
     """
     Class for controlling and plotting a planar arm with an arbitrary number of links.
@@ -28,7 +31,7 @@ class NLinkArm(object):
         self.fig.canvas.mpl_connect('key_press_event', self.on_key)
 
         self.update_points()
-        self.plot()
+        self.plot(color='green')
 
     def update_joints(self, joint_angles):
         self.joint_angles = joint_angles
@@ -102,24 +105,24 @@ class NLinkArm(object):
             self.rotate_joint(1, -1, obstacles)
         elif event.key == 'v':
             self.rotate_joint(1, 1, obstacles)
-        self.plot(obstacles)
+        self.plot(obstacles, color='black')
 
     
     def run(self):
         while not self.terminate:
             plt.pause(0.1)
 
-    def plot(self, obstacles=None):
+    def plot(self, obstacles=None, color='green'):
         self.ax.clear()
 
         # Draw the arm
         for i in range(self.n_links):
             rectangle = self.draw_rectangle(self.points[i], self.points[i + 1])
-            self.ax.plot(rectangle[:, 0], rectangle[:, 1], 'green')
-            self.ax.fill(rectangle[:, 0], rectangle[:, 1], 'green', alpha=0.3)  
+            self.ax.plot(rectangle[:, 0], rectangle[:, 1], color)
+            self.ax.fill(rectangle[:, 0], rectangle[:, 1], color, alpha=0.3)
 
         for i in range(self.n_links + 1):
-            circle = patches.Circle(self.points[i], radius=self.joint_radius, facecolor='green')
+            circle = patches.Circle(self.points[i], radius=self.joint_radius, facecolor=color)
             self.ax.add_patch(circle)
 
         # Draw obstacles if provided
@@ -154,29 +157,43 @@ class NLinkArm(object):
 
         return False
 
+# New code specific to arm_2.py
+def load_configurations(file_path):
+    return np.load(file_path)
+
+def compute_distance(config1, config2):
+    return np.linalg.norm(np.array(config1) - np.array(config2))
+
+def find_nearest_neighbors(target, configurations, k):
+    distances = [(compute_distance(target, config), config) for config in configurations]
+    distances.sort(key=lambda x: x[0])
+    return [x[1] for x in distances[:k]]
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Plot a random collision-free configuration of a robot arm.')
-    parser.add_argument('--map', type=str, help='Path to the file containing arm polygons.')
+    parser = argparse.ArgumentParser(description='Plot nearest neighbor robot configurations.')
+    parser.add_argument('--target', nargs=2, type=float, help='Target configuration [angle1, angle2]')
+    parser.add_argument('-k', type=int, help='Number of nearest neighbors to find')
+    parser.add_argument('--configs', type=str, help='File path to robot configurations')
     args = parser.parse_args()
 
-    # Load polygons
-    arm_polygons = np.load(args.map, allow_pickle=True)
+    target_config = args.target
+    configurations = load_configurations(args.configs)
+    nearest_neighbors = find_nearest_neighbors(target_config, configurations, args.k)
 
-    # Create an instance of the NLinkArm with random joint angles
-    arm = NLinkArm([0.4, 0.25], np.random.uniform(-np.pi, np.pi, size=2), joint_radius=0.05, link_width=0.1)
+    # Create a single instance of NLinkArm
+    arm = NLinkArm([0.4, 0.25], target_config, joint_radius=0.05, link_width=0.1)
 
-    # Remove polygons that collide with the arm
-    colliding_polygons = []
-    for i, polygon in enumerate(arm_polygons):
-        if arm.check_collision_with_obstacle(polygon):
-            colliding_polygons.append(i)
+    # Define colors for plotting
+    colors = ['red', 'green', 'blue'] + ['yellow'] * (args.k - 3)
 
-    arm_polygons = np.delete(arm_polygons, colliding_polygons, axis=0)
-    
-    # When arm is moved, it detects collision with the obstacles
-    arm.fig.canvas.mpl_connect('key_press_event', lambda event: arm.on_key(event, arm_polygons))
+    plt.figure()
+    arm.update_joints(target_config)
+    arm.plot(color='black')  # Plot the target arm in black
 
+    # Plot the nearest neighbors
+    for i, config in enumerate(nearest_neighbors):
+        arm.update_joints(config)
+        arm.plot(color=colors[min(i, len(colors)-1)])
 
-    # Plot the arm and the obstacles
-    arm.plot(arm_polygons)
-    plt.show()  
+    plt.show()
+
