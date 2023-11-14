@@ -1,12 +1,9 @@
-# Add imports and other necessary functions from arm_1.py
 import argparse
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import collision_checking
 
-
-# Existing NLinkArm class and other functions from arm_1.py
 class NLinkArm(object):
     """
     Class for controlling and plotting a planar arm with an arbitrary number of links.
@@ -31,7 +28,7 @@ class NLinkArm(object):
         self.fig.canvas.mpl_connect('key_press_event', self.on_key)
 
         self.update_points()
-        self.plot(color='green')
+        self.plot()
 
     def update_joints(self, joint_angles):
         self.joint_angles = joint_angles
@@ -105,25 +102,60 @@ class NLinkArm(object):
             self.rotate_joint(1, -1, obstacles)
         elif event.key == 'v':
             self.rotate_joint(1, 1, obstacles)
-        self.plot(obstacles, color='black')
+        self.plot(obstacles)
 
     
     def run(self):
         while not self.terminate:
             plt.pause(0.1)
 
-    def plot(self, obstacles=None, color='green'):
-        self.ax.clear()
+    # def plot(self, color='green', obstacles=None, clear_axes=True):
+    #     # Clear the axes only for the first configuration
+    #     if clear_axes:
+    #         self.ax.clear()
 
-        # Draw the arm
+    #     # Draw the arm with the specified color
+    #     for i in range(self.n_links):
+    #         rectangle = self.draw_rectangle(self.points[i], self.points[i + 1])
+    #         self.ax.plot(rectangle[:, 0], rectangle[:, 1], color)
+    #         self.ax.fill(rectangle[:, 0], rectangle[:, 1], color, alpha=0.3)
+
+    #     # Draw the circular joints for each configuration
+    #     for i in range(self.n_links + 1):
+    #         circle = patches.Circle(self.points[i], radius=self.joint_radius, facecolor=color)
+    #         self.ax.add_patch(circle)
+
+    #     # Draw obstacles if provided
+    #     if obstacles is not None:
+    #         for obstacle in obstacles:
+    #             polygon = patches.Polygon(obstacle, edgecolor='black', facecolor='none')
+    #             self.ax.add_patch(polygon)
+
+    #     # Set axis limits
+    #     self.ax.set_xlim([0, 2])
+    #     self.ax.set_ylim([0, 2])
+
+    #     # Redraw and pause only if clearing the axes
+    #     if clear_axes:
+    #         plt.draw()
+    #         plt.pause(1e-5)
+
+    def plot(self, color='green', obstacles=None, clear_axes=True):
+        # Clear the axes only for the first configuration
+        if clear_axes:
+            self.ax.clear()
+
+        # Draw the arm with the specified color
         for i in range(self.n_links):
             rectangle = self.draw_rectangle(self.points[i], self.points[i + 1])
             self.ax.plot(rectangle[:, 0], rectangle[:, 1], color)
             self.ax.fill(rectangle[:, 0], rectangle[:, 1], color, alpha=0.3)
 
+        # Draw the circular joints for each configuration
         for i in range(self.n_links + 1):
-            circle = patches.Circle(self.points[i], radius=self.joint_radius, facecolor=color)
+            circle = patches.Circle(self.points[i], radius=self.joint_radius, facecolor=color, zorder=4)
             self.ax.add_patch(circle)
+            print(f"Circle {i}: center = {self.points[i]}, radius = {self.joint_radius}")  # Debug print
 
         # Draw obstacles if provided
         if obstacles is not None:
@@ -131,10 +163,16 @@ class NLinkArm(object):
                 polygon = patches.Polygon(obstacle, edgecolor='black', facecolor='none')
                 self.ax.add_patch(polygon)
 
+        # Set axis limits
         self.ax.set_xlim([0, 2])
         self.ax.set_ylim([0, 2])
-        plt.draw()
-        plt.pause(1e-5)
+
+        # Redraw and pause only if clearing the axes
+        if clear_axes:
+            plt.draw()
+            plt.pause(1e-5)
+
+
 
     @staticmethod
     def circle_to_polygon(center, radius, num_vertices=8):
@@ -155,45 +193,64 @@ class NLinkArm(object):
             if collision_checking.collides(np.array(joint_polygon), np.array(obstacle)):
                 return True
 
-        return False
+        return False 
 
-# New code specific to arm_2.py
-def load_configurations(file_path):
-    return np.load(file_path)
+def load_configurations(filename):
+    return np.load(filename)
 
-def compute_distance(config1, config2):
-    return np.linalg.norm(np.array(config1) - np.array(config2))
+def euclidean_distance(config1, config2):
+    return np.linalg.norm(config1 - config2)
 
-def find_nearest_neighbors(target, configurations, k):
-    distances = [(compute_distance(target, config), config) for config in configurations]
-    distances.sort(key=lambda x: x[0])
-    return [x[1] for x in distances[:k]]
+def find_nearest_neighbors(target, configs, k):
+    distances = [euclidean_distance(target, config) for config in configs]
+    neighbor_indices = np.argsort(distances)[:k]
+    return configs[neighbor_indices]
+
+def plot_robot_arm(arm, target_config, neighbor_configs, colors):
+    # Plot the target configuration first
+    arm.update_joints(target_config)
+    arm.plot(color='black', clear_axes=True)
+    plt.pause(0.5)  # Adding a pause for visual distinction
+
+    # Plot each neighbor configuration
+    for config, color in zip(neighbor_configs, colors):
+        print(f"Plotting configuration: {config}, Color: {color}")
+        arm.update_joints(config)
+        arm.plot(color=color, clear_axes=False)
+        plt.pause(0.5)  # Adding a pause for visual distinction
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Plot nearest neighbor robot configurations.')
-    parser.add_argument('--target', nargs=2, type=float, help='Target configuration [angle1, angle2]')
-    parser.add_argument('-k', type=int, help='Number of nearest neighbors to find')
-    parser.add_argument('--configs', type=str, help='File path to robot configurations')
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--target', nargs=2, type=float, help='Target joint angles')
+    parser.add_argument('--k', type=int, help='Number of nearest neighbors')
+    parser.add_argument('--configs', type=str, help='Filename of robot configurations')
     args = parser.parse_args()
 
-    target_config = args.target
-    configurations = load_configurations(args.configs)
-    nearest_neighbors = find_nearest_neighbors(target_config, configurations, args.k)
+    # Load configurations
+    configs = load_configurations(args.configs)
 
-    # Create a single instance of NLinkArm
+    # Extract the target configuration
+    target_config = np.array(args.target)
+
+    # Find the nearest neighbors
+    neighbors = find_nearest_neighbors(target_config, configs, args.k)
+
+    # Extract neighbor configurations
+    num_neighbors = min(len(neighbors), args.k)  # Ensure not to exceed the available neighbors
+    neighbor_configs = neighbors[:num_neighbors]
+
+    # Define colors for the neighbors
+    colors = ['red', 'green', 'blue'][:num_neighbors]
+    if num_neighbors > 3:
+        colors.extend(['yellow'] * (num_neighbors - 3))
+
+    # Create the arm instance
     arm = NLinkArm([0.4, 0.25], target_config, joint_radius=0.05, link_width=0.1)
 
-    # Define colors for plotting
-    colors = ['red', 'green', 'blue'] + ['yellow'] * (args.k - 3)
-
-    plt.figure()
-    arm.update_joints(target_config)
-    arm.plot(color='black')  # Plot the target arm in black
-
-    # Plot the nearest neighbors
-    for i, config in enumerate(nearest_neighbors):
-        arm.update_joints(config)
-        arm.plot(color=colors[min(i, len(colors)-1)])
+    # Plot the arm configurations
+    plot_robot_arm(arm, target_config, neighbor_configs, colors)
 
     plt.show()
+
+
 
