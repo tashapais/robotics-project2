@@ -66,9 +66,13 @@ def forward_kinematics(theta1, theta2):
 def extract_prm_path(parents, goal_node):
     path = []
     current_node = goal_node
-    while current_node is not None:
+    max_iterations = len(parents)  # Or some other sensible upper limit
+    iteration = 0
+    while current_node is not None and iteration < max_iterations:
         path.append(current_node)
+        print(f"Adding node to path: {current_node}, Parent: {parents.get(tuple(current_node), None)}")
         current_node = parents.get(tuple(current_node), None)  # Safely get parent
+        iteration += 1
     return path[::-1]  # Return reversed path
 
 
