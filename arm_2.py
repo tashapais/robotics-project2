@@ -109,37 +109,6 @@ class NLinkArm(object):
         while not self.terminate:
             plt.pause(0.1)
 
-    # def plot(self, color='green', obstacles=None, clear_axes=True):
-    #     # Clear the axes only for the first configuration
-    #     if clear_axes:
-    #         self.ax.clear()
-
-    #     # Draw the arm with the specified color
-    #     for i in range(self.n_links):
-    #         rectangle = self.draw_rectangle(self.points[i], self.points[i + 1])
-    #         self.ax.plot(rectangle[:, 0], rectangle[:, 1], color)
-    #         self.ax.fill(rectangle[:, 0], rectangle[:, 1], color, alpha=0.3)
-
-    #     # Draw the circular joints for each configuration
-    #     for i in range(self.n_links + 1):
-    #         circle = patches.Circle(self.points[i], radius=self.joint_radius, facecolor=color)
-    #         self.ax.add_patch(circle)
-
-    #     # Draw obstacles if provided
-    #     if obstacles is not None:
-    #         for obstacle in obstacles:
-    #             polygon = patches.Polygon(obstacle, edgecolor='black', facecolor='none')
-    #             self.ax.add_patch(polygon)
-
-    #     # Set axis limits
-    #     self.ax.set_xlim([0, 2])
-    #     self.ax.set_ylim([0, 2])
-
-    #     # Redraw and pause only if clearing the axes
-    #     if clear_axes:
-    #         plt.draw()
-    #         plt.pause(1e-5)
-
     def plot(self, color='green', obstacles=None, clear_axes=True):
         # Clear the axes only for the first configuration
         if clear_axes:
